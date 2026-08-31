@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classroom Timer Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body, html { width: 100vw; height: 100vh; overflow: hidden; background-color: #f4f5f7; }
+
+    /* Modal Overlay for Mode Selection and Roster Selection */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000;
+    }
+    .modal-card {
+      background: #fff; padding: 24px; border-radius: 16px; width: 80%; max-width: 600px;
+      max-height: 85vh; overflow-y: auto; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .modal-title { font-size: 1.5rem; margin-bottom: 20px; color: #333; }
+    .btn-group { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    
+    .btn-choice {
+      padding: 16px 24px; font-size: 1.2rem; font-weight: bold; border-radius: 10px;
+      border: none; cursor: pointer; color: white; background: #4f46e5; transition: transform 0.1s;
+    }
+    .btn-choice:active { transform: scale(0.96); }
+
+    .roster-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-height: 50vh; overflow-y: auto; margin-top: 15px; }
+    .roster-btn { padding: 12px; font-size: 1rem; border: 1px solid #ccc; background: #f9fafb; border-radius: 8px; cursor: pointer; text-align: left; }
+
+    /* Main Dashboard Layout (iPad Landscape Optimized) */
+    .dashboard { display: flex; width: 100vw; height: 100vh; padding: 12px; gap: 12px; }
+    .left-section { width: 75vw; height: 100%; display: flex; flex-direction: column; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .right-section { width: 25vw; height: 100%; display: flex; flex-direction: column; gap: 12px; }
+
+    .section-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 8px; text-align: center; color: #1f2937; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Hallway Checkout Grid */
+    .grid-4x3 { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 12px; flex: 1; }
+    .hallway-btn {
+      background-color: #d8b4fe; border: none; border-radius: 12px; font-size: 2.2rem; font-weight: bold;
+      color: #3b0764; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: background 0.2s;
+    }
+    .hallway-btn.active-timer { background-color: #ef4444; color: #fff; }
+    .hallway-btn.expired-timer { background-color: #22c55e; color: #fff; }
+    .timer-subtext { font-size: 1.2rem; margin-top: 4px; }
+
+    /* Top-Right: Testing Window */
+    .testing-container { height: 33.33%; background: #fff; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .status-square {
+      flex: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; font-weight: bold; color: white; text-align: center; padding: 8px;
+    }
+    .status-open { background-color: #22c55e; }
+    .status-closed { background-color: #ef4444; }
+
+    /* Bottom-Right: Bathroom */
+    .bathroom-container { height: 66.66%; background: #fff; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .bathroom-btn {
+      flex: 1; border: none; border-radius: 12px; font-size: 1.3rem; font-weight: bold; color: white;
+      cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; text-align: center;
+    }
+    .btn-girls { background-color: #22c55e; }
+    .btn-boys { background-color: #3b82f6; }
+    .bathroom-btn.active-checkout { background-color: #ef4444; }
+  </style>
+</head>
+<body>
+
+  <div id="mode-modal" class="modal-overlay">
+    <div class="modal-card">
+      <h2 class="modal-title">Select Day Schedule Mode</h2>
+      <div class="btn-group">
+        <button class="btn-choice" onclick="selectMode('normal')">Normal Day</button>
+        <button class="btn-choice" onclick="selectMode('early')" style="background-color: #f59e0b;">Early Dismissal</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="roster-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <h2 id="roster-title" class="modal-title">Select Teacher</h2>
+      <div id="roster-content" class="btn-group"></div>
+    </div>
+  </div>
+
+  <div class="dashboard">
+    <div class="left-section">
+      <div class="section-title">Hallway Checkout</div>
+      <div class="grid-4x3" id="hallway-grid"></div>
+    </div>
+
+    <div class="right-section">
+      <div class="testing-container">
+        <div class="section-title">Testing Window</div>
+        <div id="testing-status" class="status-square status-closed">Testing Window Closed</div>
+      </div>
+
+      <div class="bathroom-container">
+        <div class="section-title">Bathroom</div>
+        <button id="btn-girls" class="bathroom-btn btn-girls" onclick="initiateBathroomCheckout('Girls')">
+          <span>Girls</span>
+        </button>
+        <button id="btn-boys" class="bathroom-btn btn-boys" onclick="initiateBathroomCheckout('Boys')">
+          <span>Boys</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Audio Objects
+    const miserlouAudio = new Audio('miserlou.mp3');
+    const rumbleAudio = new Audio('rumble.mp3');
+
+    // Rosters Data
+    const rosters = {
+      Teplinski: ["Bianca Belyi","Varnit Bhatt","Melina Britt","Shanaya Choudhary","Aadvik Dwivedi","Pierce Hawking","Niaya Jacob","Nathan Jin","Smahi Karhade","Athiya Kolachina","Evan Kopinski","Zayden Krasner","Sahasrika Moganti","Talia Portnoy","Eliya Shaked","Terrence Shao","Vihaan Sharma","Arina Simkin","George Spidle","Yonatan Terem","Suld Tsogtbaatar","Aahil Vicas"],
+      Murdach: ["Shiloh Ade","Jaishnavi Balasubramanian","Sriram Reddy Chichili","Tanaya Chopra","Emil Gara","Aadhya Goteti","Hunter Krenz-Aemisegger","Colette Lee","Steffan Mahaha","Vihaan Malepati","Aleksandra Molchanov","Nicholas Page","Adwaidan Palaniappan","Sofiia Pylypenko","Naisha Sengar","Annette Simon","Dennis Sivachev","Anamitra Suyamburajan","Tuguldur Tugsbayar","Ragnar Urmatbekov","Arjun Vinodkumar","Alyssa Weller"],
+      Salus: ["Nilufar Aynazarova","Alexey Berezovchuk","Meenakshi Bhagavathula","Aarav Bhatia","Swara Bidkar","Atharva Dubal","Michael Dzhurylyuk","Baylee Hundley","Saanvi Katrue","Nivedh Kola","Lauren Lim","Braxton Lookis","Nikita Lunev","Miles Mergen","Ivan Mishra","Viti Nagaraja","Aksharasree Rajadurai","Yudith Dev Sathish","Mari Schwartz","Dylan Shekhter","Aadya Sinha","Krish Yeshwanth"]
+    };
+
+    // State Control
+    let selectedMode = null;
+    let loggedStudents = [];
+    let audioPlayedState = {};
+
+    let hallwayTimers = Array(12).fill(null).map(() => ({ secondsLeft: 300, interval: null, active: false, expired: false }));
+    let bathroomState = {
+      Girls: { active: false, name: null, seconds: 0, interval: null },
+      Boys: { active: false, name: null, seconds: 0, interval: null }
+    };
+    let currentGenderCheckout = null;
+
+    // Build Hallway Grid
+    const hallwayGrid = document.getElementById('hallway-grid');
+    for (let i = 1; i <= 12; i++) {
+      const btn = document.createElement('button');
+      btn.className = 'hallway-btn';
+      btn.id = `hallway-btn-${i}`;
+      btn.onclick = () => handleHallwayClick(i - 1);
+      btn.innerHTML = `<span>${i}</span><span class="timer-subtext" id="hallway-timer-${i}"></span>`;
+      hallwayGrid.appendChild(btn);
+    }
+
+    function selectMode(mode) {
+      selectedMode = mode;
+      document.getElementById('mode-modal').style.display = 'none';
+      // Unlock Web Audio Context for Safari/iOS
+      miserlouAudio.play().then(() => miserlouAudio.pause()).catch(() => {});
+      rumbleAudio.play().then(() => rumbleAudio.pause()).catch(() => {});
+      setInterval(checkTimeSchedules, 1000);
+    }
+
+    // Hallway Logic
+    function handleHallwayClick(idx) {
+      const state = hallwayTimers[idx];
+      const btn = document.getElementById(`hallway-btn-${idx + 1}`);
+      const timerLabel = document.getElementById(`hallway-timer-${idx + 1}`);
+
+      if (state.expired) {
+        // Reset from expired state back to original purple
+        state.expired = false;
+        state.active = false;
+        state.secondsLeft = 300;
+        btn.className = 'hallway-btn';
+        timerLabel.innerText = '';
+        return;
+      }
+
+      if (state.active) {
+        // Cancel Timer
+        clearInterval(state.interval);
+        state.active = false;
+        state.secondsLeft = 300;
+        btn.className = 'hallway-btn';
+        timerLabel.innerText = '';
+      } else {
+        // Start 5 min countdown
+        state.active = true;
+        btn.className = 'hallway-btn active-timer';
+        updateTimerDisplay(idx);
+        state.interval = setInterval(() => {
+          state.secondsLeft--;
+          if (state.secondsLeft <= 0) {
+            clearInterval(state.interval);
+            state.active = false;
+            state.expired = true;
+            btn.className = 'hallway-btn expired-timer';
+            timerLabel.innerText = '0:00';
+            announceGroup(idx + 1);
+          } else {
+            updateTimerDisplay(idx);
+          }
+        }, 1000);
+      }
+    }
+
+    function updateTimerDisplay(idx) {
+      const m = Math.floor(hallwayTimers[idx].secondsLeft / 60);
+      const s = hallwayTimers[idx].secondsLeft % 60;
+      document.getElementById(`hallway-timer-${idx + 1}`).innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    function announceGroup(groupNum) {
+      if ('speechSynthesis' in window) {
+        const text = `Group ${groupNum}, Group ${groupNum}, Group ${groupNum}`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    // Bathroom Logic
+    function initiateBathroomCheckout(gender) {
+      const state = bathroomState[gender];
+      const btn = document.getElementById(`btn-${gender.toLowerCase()}`);
+      
+      if (state.active) {
+        // Reset timer
+        clearInterval(state.interval);
+        state.active = false;
+        state.name = null;
+        state.seconds = 0;
+        btn.className = `bathroom-btn btn-${gender.toLowerCase()}`;
+        btn.innerHTML = `<span>${gender}</span>`;
+      } else {
+        currentGenderCheckout = gender;
+        openTeacherModal();
+      }
+    }
+
+    function openTeacherModal() {
+      const modal = document.getElementById('roster-modal');
+      const title = document.getElementById('roster-title');
+      const content = document.getElementById('roster-content');
+      title.innerText = "Select Teacher";
+      content.innerHTML = `
+        <button class="btn-choice" onclick="openStudentModal('Murdach')">Murdach</button>
+        <button class="btn-choice" onclick="openStudentModal('Salus')">Salus</button>
+        <button class="btn-choice" onclick="openStudentModal('Teplinski')">Teplinski</button>
+      `;
+      modal.style.display = 'flex';
+    }
+
+    function openStudentModal(teacher) {
+      const title = document.getElementById('roster-title');
+      const content = document.getElementById('roster-content');
+      title.innerText = `Select Student (${teacher})`;
+      
+      let html = '<div class="roster-list">';
+      rosters[teacher].forEach(name => {
+        html += `<button class="roster-btn" onclick="selectStudent('${name.replace(/'/g, "\\'")}')">${name}</button>`;
+      });
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    function selectStudent(studentName) {
+      document.getElementById('roster-modal').style.display = 'none';
+      const gender = currentGenderCheckout;
+      const state = bathroomState[gender];
+      const btn = document.getElementById(`btn-${gender.toLowerCase()}`);
+
+      // Log student checkout for PDF
+      loggedStudents.push({ name: studentName, time: new Date().toLocaleTimeString(), gender: gender });
+
+      state.active = true;
+      state.name = studentName;
+      state.seconds = 0;
+      btn.className = 'bathroom-btn active-checkout';
+
+      updateBathroomDisplay(gender);
+      state.interval = setInterval(() => {
+        state.seconds++;
+        updateBathroomDisplay(gender);
+      }, 1000);
+    }
+
+    function updateBathroomDisplay(gender) {
+      const state = bathroomState[gender];
+      const m = Math.floor(state.seconds / 60);
+      const s = state.seconds % 60;
+      const btn = document.getElementById(`btn-${gender.toLowerCase()}`);
+      btn.innerHTML = `<span>${state.name}</span><span style="font-size:1rem; margin-top:4px;">${m}:${s < 10 ? '0' : ''}${s}</span>`;
+    }
+
+    // Time-based Schedule System
+    function checkTimeSchedules() {
+      const now = new Date();
+      // CST Time Check
+      const timeStr = now.toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour12: false });
+      const [hrs, mins, secs] = timeStr.split(':').map(Number);
+      const currentMinutes = hrs * 60 + mins;
+
+      updateTestingWindow(currentMinutes);
+      checkAudioTriggers(currentMinutes, hrs, mins, secs);
+      checkPdfTrigger(hrs, mins, secs);
+    }
+
+    function updateTestingWindow(currentMinutes) {
+      const statusBox = document.getElementById('testing-status');
+      let isOpen = false;
+
+      if (selectedMode === 'normal') {
+        // 8:15-8:40 (495-520), 9:45-10:10 (585-610), 10:25-10:50 (625-650)
+        isOpen = (currentMinutes >= 495 && currentMinutes < 520) ||
+                 (currentMinutes >= 585 && currentMinutes < 610) ||
+                 (currentMinutes >= 625 && currentMinutes < 650);
+      } else if (selectedMode === 'early') {
+        // 8:15-8:30 (495-510), 9:25-9:40 (565-580), 9:55-10:10 (595-610)
+        isOpen = (currentMinutes >= 495 && currentMinutes < 510) ||
+                 (currentMinutes >= 565 && currentMinutes < 580) ||
+                 (currentMinutes >= 595 && currentMinutes < 610);
+      }
+
+      if (isOpen) {
+        statusBox.className = 'status-square status-open';
+        statusBox.innerText = 'Testing Window Open';
+      } else {
+        statusBox.className = 'status-square status-closed';
+        statusBox.innerText = 'Testing Window Closed';
+      }
+    }
+
+    function checkAudioTriggers(currentMinutes, hrs, mins, secs) {
+      if (secs !== 0) return; // Trigger right on the minute boundary
+
+      const key = `${hrs}:${mins}`;
+      if (audioPlayedState[key]) return;
+
+      let miserlouTimes = [];
+      let rumbleTimes = [];
+
+      if (selectedMode === 'normal') {
+        miserlouTimes = ['8:38', '10:13', '10:53'];
+        rumbleTimes = ['12:13', '13:23', '14:23'];
+      } else if (selectedMode === 'early') {
+        miserlouTimes = ['8:33', '9:43', '10:13'];
+        rumbleTimes = ['11:23', '12:03', '12:53'];
+      }
+
+      if (miserlouTimes.includes(key)) {
+        miserlouAudio.play();
+        audioPlayedState[key] = true;
+      } else if (rumbleTimes.includes(key)) {
+        rumbleAudio.play();
+        audioPlayedState[key] = true;
+      }
+    }
+
+    function checkPdfTrigger(hrs, mins, secs) {
+      const pdfKey = `pdf_${hrs}:${mins}`;
+      if (secs !== 0 || audioPlayedState[pdfKey]) return;
+
+      if ((selectedMode === 'normal' && hrs === 14 && mins === 30) || 
+          (selectedMode === 'early' && hrs === 13 && mins === 30)) {
+        generatePDF();
+        audioPlayedState[pdfKey] = true;
+      }
+    }
+
+    function generatePDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text("Classroom Bathroom Checkout Log", 20, 20);
+      doc.setFontSize(12);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 30);
+      doc.text(`Schedule Mode: ${selectedMode.toUpperCase()} DAY`, 20, 38);
+
+      let y = 50;
+      doc.setFont(undefined, 'bold');
+      doc.text("Time", 20, y);
+      doc.text("Student Name", 60, y);
+      doc.text("Gender", 140, y);
+      doc.line(20, y + 2, 190, y + 2);
+
+      doc.setFont(undefined, 'normal');
+      y += 10;
+
+      if (loggedStudents.length === 0) {
+        doc.text("No checkouts recorded today.", 20, y);
+      } else {
+        loggedStudents.forEach(item => {
+          if (y > 270) { doc.addPage(); y = 20; }
+          doc.text(item.time, 20, y);
+          doc.text(item.name, 60, y);
+          doc.text(item.gender, 140, y);
+          y += 8;
+        });
+      }
+
+      doc.save(`checkout-log-${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+  </script>
+</body>
+</html>
