@@ -47,7 +47,7 @@
     .hallway-btn.expired-timer { background-color: #22c55e; color: #fff; }
     .timer-subtext { font-size: 1.2rem; margin-top: 4px; }
 
-    /* Top-Right: Testing Window */
+    /* Top-Right: Challenge Window */
     .testing-container { height: 33.33%; background: #fff; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .status-square {
       flex: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
@@ -94,8 +94,8 @@
 
     <div class="right-section">
       <div class="testing-container">
-        <div class="section-title">Testing Window</div>
-        <div id="testing-status" class="status-square status-closed">Testing Window Closed</div>
+        <div class="section-title">Challenge Window</div>
+        <div id="testing-status" class="status-square status-closed">Challenge Window Closed</div>
       </div>
 
       <div class="bathroom-container">
@@ -294,12 +294,12 @@
       const [hrs, mins, secs] = timeStr.split(':').map(Number);
       const currentMinutes = hrs * 60 + mins;
 
-      updateTestingWindow(currentMinutes);
+      updateChallengeWindow(currentMinutes);
       checkAudioTriggers(currentMinutes, hrs, mins, secs);
       checkPdfTrigger(hrs, mins, secs);
     }
 
-    function updateTestingWindow(currentMinutes) {
+    function updateChallengeWindow(currentMinutes) {
       const statusBox = document.getElementById('testing-status');
       let isOpen = false;
 
@@ -317,10 +317,10 @@
 
       if (isOpen) {
         statusBox.className = 'status-square status-open';
-        statusBox.innerText = 'Testing Window Open';
+        statusBox.innerText = 'Challenge Window Open';
       } else {
         statusBox.className = 'status-square status-closed';
-        statusBox.innerText = 'Testing Window Closed';
+        statusBox.innerText = 'Challenge Window Closed';
       }
     }
 
